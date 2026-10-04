@@ -1,0 +1,67 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /motorcycles/{motorcycleId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(motorcycleId)
+          && request.resource.data.userId == userId
+          && request.resource.data.name is string
+          && request.resource.data.plateNumber is string
+          && request.resource.data.currentOdometer is number;
+        allow update: if isOwner(userId)
+          && isValidId(motorcycleId)
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) && isValidId(motorcycleId);
+      }
+
+      match /reminders/{reminderId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(reminderId)
+          && request.resource.data.userId == userId
+          && request.resource.data.title is string
+          && request.resource.data.intervalKm is number;
+        allow update: if isOwner(userId)
+          && isValidId(reminderId)
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) && isValidId(reminderId);
+      }
+
+      match /records/{recordId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(recordId)
+          && request.resource.data.userId == userId
+          && request.resource.data.date is string
+          && request.resource.data.odometer is number;
+        allow update: if isOwner(userId)
+          && isValidId(recordId)
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) && isValidId(recordId);
+      }
+    }
+
+    // Connection testing doc
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}

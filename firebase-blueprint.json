@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "Motorcycle": {
+      "title": "Motorcycle",
+      "description": "Kendaraan motor yang terdaftar di garasi pengguna",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID unik dokumen motor" },
+        "userId": { "type": "string", "description": "UID pemilik motor" },
+        "name": { "type": "string", "description": "Merk dan model motor" },
+        "plateNumber": { "type": "string", "description": "Nomor plat polisi kendaraan" },
+        "year": { "type": "number", "description": "Tahun perakitan/pembuatan motor" },
+        "type": { "type": "string", "enum": ["matic", "manual", "bebek", "sport"] },
+        "engineCc": { "type": "number", "description": "Kapasitas mesin dalam CC" },
+        "currentOdometer": { "type": "number", "description": "Odometer terkini dalam KM" },
+        "avgKmPerDay": { "type": "number", "description": "Rata-rata jarak tempuh harian (KM)" },
+        "color": { "type": "string", "description": "Warna motor" },
+        "notes": { "type": "string", "description": "Catatan tambahan pemilik" },
+        "createdAt": { "type": "string", "description": "Timestamp pembuatan data" }
+      },
+      "required": ["id", "userId", "name", "plateNumber", "year", "type", "currentOdometer", "createdAt"]
+    },
+    "ServiceReminder": {
+      "title": "ServiceReminder",
+      "description": "Jadwal pengingat servis rutin berkala untuk motor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID unik pengingat" },
+        "userId": { "type": "string", "description": "UID pemilik" },
+        "motorId": { "type": "string", "description": "ID motor terkait" },
+        "title": { "type": "string", "description": "Nama pekerjaan/komponen servis" },
+        "category": { "type": "string", "description": "Kategori servis" },
+        "intervalKm": { "type": "number", "description": "Interval kilometer" },
+        "intervalMonths": { "type": "number", "description": "Interval bulan" },
+        "lastServicedKm": { "type": "number", "description": "KM saat servis terakhir" },
+        "lastServicedDate": { "type": "string", "description": "Tanggal servis terakhir" },
+        "notes": { "type": "string", "description": "Spesifikasi atau catatan teknis" },
+        "isCustom": { "type": "boolean", "description": "Apakah dibuat kustom oleh pengguna" }
+      },
+      "required": ["id", "userId", "motorId", "title", "intervalKm", "intervalMonths", "lastServicedKm", "lastServicedDate"]
+    },
+    "ServiceRecord": {
+      "title": "ServiceRecord",
+      "description": "Catatan riwayat perbaikan dan faktur servis motor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "ID riwayat servis" },
+        "userId": { "type": "string", "description": "UID pemilik" },
+        "motorId": { "type": "string", "description": "ID motor terkait" },
+        "date": { "type": "string", "description": "Tanggal servis dilakukan" },
+        "odometer": { "type": "number", "description": "Angka odometer saat diservis" },
+        "workshopName": { "type": "string", "description": "Nama bengkel servis" },
+        "serviceType": { "type": "string", "description": "Tipe pekerjaan servis" },
+        "tasksCompleted": { "type": "array", "description": "Daftar pekerjaan yang dikerjakan" },
+        "costParts": { "type": "number", "description": "Biaya onderdil/sparepart" },
+        "costLabor": { "type": "number", "description": "Ongkos jasa mekanik" },
+        "totalCost": { "type": "number", "description": "Total biaya servis" },
+        "mechanicNotes": { "type": "string", "description": "Catatan dari mekanik" },
+        "warrantyDays": { "type": "number", "description": "Masa garansi bengkel dalam hari" },
+        "receiptImage": { "type": "string", "description": "Foto nota/struk kasir (base64/URL)" },
+        "createdAt": { "type": "string", "description": "Timestamp pembuatan entri" }
+      },
+      "required": ["id", "userId", "motorId", "date", "odometer", "serviceType", "totalCost", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/motorcycles/{motorcycleId}": {
+      "schema": { "$ref": "#/entities/Motorcycle" },
+      "description": "Koleksi data motor milik pengguna"
+    },
+    "/users/{userId}/reminders/{reminderId}": {
+      "schema": { "$ref": "#/entities/ServiceReminder" },
+      "description": "Koleksi jadwal pengingat servis motor milik pengguna"
+    },
+    "/users/{userId}/records/{recordId}": {
+      "schema": { "$ref": "#/entities/ServiceRecord" },
+      "description": "Koleksi riwayat dan nota servis milik pengguna"
+    }
+  }
+}

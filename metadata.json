@@ -1,0 +1,6 @@
+{
+  "name": "Buku Servis Motor - Catatan & Pengingat Servis Rutin",
+  "description": "Aplikasi buku servis digital untuk memantau riwayat perawatan, penggantian sparepart, dan pengingat jadwal servis berkala motor Anda.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
