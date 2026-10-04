@@ -1,6 +1,7 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useMotor } from '../context/MotorContext';
 import { formatDateIndo, formatKm, formatRupiah } from '../utils/formatters';
+import { ConfirmModal } from './ConfirmModal';
 import { X, Printer, Download, Upload, RotateCcw, Bike } from 'lucide-react';
 
 interface PrintReportModalProps {
@@ -14,6 +15,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
 }) => {
   const { activeMotor, activeRecords, exportBackup, importBackup, resetAllData } = useMotor();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const handlePrint = () => {
     window.print();
@@ -115,12 +117,7 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           </div>
 
           <button
-            onClick={() => {
-              if (confirm('Yakin ingin menghapus seluruh data motor, pengingat, dan riwayat servis? Tindakan ini akan mengosongkan garasi Anda.')) {
-                resetAllData();
-                onClose();
-              }
-            }}
+            onClick={() => setShowResetConfirm(true)}
             className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-red-400 p-1.5 transition"
             title="Kosongkan seluruh data"
           >
@@ -244,6 +241,22 @@ export const PrintReportModal: React.FC<PrintReportModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* In-app Confirmation for Reset All Data */}
+      <ConfirmModal
+        isOpen={showResetConfirm}
+        onClose={() => setShowResetConfirm(false)}
+        onConfirm={() => {
+          resetAllData();
+          setShowResetConfirm(false);
+          onClose();
+        }}
+        title="Kosongkan Seluruh Data?"
+        message="Seluruh data profil motor, catatan servis, dan jadwal pengingat akan dihapus dari aplikasi dan database cloud. Tindakan ini tidak dapat dibatalkan."
+        confirmText="Kosongkan Semua"
+        cancelText="Batal"
+        isDanger={true}
+      />
     </div>
   );
 };

@@ -15,7 +15,7 @@ import { PrintReportModal } from './components/PrintReportModal';
 import { BottomNav } from './components/BottomNav';
 import { GarageDrawer } from './components/GarageDrawer';
 import { checkAllDueReminders } from './utils/notifications';
-import { ServiceReminder, Motorcycle } from './types';
+import { ServiceReminder, Motorcycle, ServiceRecord } from './types';
 import {
   Clock,
   History,
@@ -46,28 +46,34 @@ function MotorAppContent() {
   const [showPrint, setShowPrint] = useState(false);
   const [showGarageDrawer, setShowGarageDrawer] = useState(false);
   const [preselectedReminder, setPreselectedReminder] = useState<ServiceReminder | null>(null);
+  const [editingRecord, setEditingRecord] = useState<ServiceRecord | null>(null);
 
   const allAlerts = checkAllDueReminders(motorcycles, reminders);
   const currentMotorAlerts = allAlerts.filter((a) => a.motorId === activeMotor?.id);
 
   const handleQuickRecordService = (reminder: ServiceReminder) => {
+    setEditingRecord(null);
     setPreselectedReminder(reminder);
     setShowAddService(true);
   };
 
   const handleOpenAddService = () => {
     if (motorcycles.length === 0) {
-      alert('Silakan daftarkan motor pertama Anda terlebih dahulu sebelum mencatat servis.');
       handleOpenNewMotor();
       return;
     }
+    setEditingRecord(null);
     setPreselectedReminder(null);
+    setShowAddService(true);
+  };
+
+  const handleOpenEditService = (record: ServiceRecord) => {
+    setEditingRecord(record);
     setShowAddService(true);
   };
 
   const handleOpenQuickKm = () => {
     if (motorcycles.length === 0) {
-      alert('Silakan daftarkan motor terlebih dahulu untuk memperbarui odometer.');
       handleOpenNewMotor();
       return;
     }
@@ -76,7 +82,6 @@ function MotorAppContent() {
 
   const handleOpenAddReminder = () => {
     if (motorcycles.length === 0) {
-      alert('Silakan daftarkan motor terlebih dahulu untuk menambah jadwal pengingat.');
       handleOpenNewMotor();
       return;
     }
@@ -240,13 +245,17 @@ function MotorAppContent() {
             <div className="pt-1 sm:pt-2">
               {activeTab === 'reminders' && (
                 <ServiceRemindersSection
-                  onOpenAddReminder={() => setShowAddReminder(true)}
+                  onOpenAddReminder={handleOpenAddReminder}
+                  onOpenAddService={handleOpenAddService}
                   onQuickRecordService={handleQuickRecordService}
                 />
               )}
 
               {activeTab === 'history' && (
-                <ServiceHistorySection onOpenAddService={handleOpenAddService} />
+                <ServiceHistorySection
+                  onOpenAddService={handleOpenAddService}
+                  onEditService={handleOpenEditService}
+                />
               )}
 
               {activeTab === 'costs' && <CostSummarySection />}
@@ -311,9 +320,21 @@ function MotorAppContent() {
         editingMotor={editingMotor}
       />
 
+      <AddServiceModal
+        isOpen={showAddService}
+        onClose={() => {
+          setShowAddService(false);
+          setEditingRecord(null);
+        }}
+        preselectedReminder={preselectedReminder}
+        editingRecord={editingRecord}
+        onOpenAddMotor={handleOpenNewMotor}
+      />
+
       <AddReminderModal
         isOpen={showAddReminder}
         onClose={() => setShowAddReminder(false)}
+        onOpenAddMotor={handleOpenNewMotor}
       />
 
       <QuickKmModal

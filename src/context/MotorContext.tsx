@@ -27,14 +27,16 @@ const STORAGE_KEYS = {
   ACTIVE_ID: 'buku_servis_active_motor_id_v2',
 };
 
-// Clean up old dummy storage keys if present
-try {
-  localStorage.removeItem('buku_servis_motorcycles_v1');
-  localStorage.removeItem('buku_servis_reminders_v1');
-  localStorage.removeItem('buku_servis_records_v1');
-  localStorage.removeItem('buku_servis_active_motor_id_v1');
-} catch (e) {
-  // Ignore
+// Helper: Firestore rejects any object containing `undefined` values.
+// This function strips undefined values so writes never crash.
+function cleanForFirestore<T extends Record<string, any>>(obj: T): T {
+  const result: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 interface MotorContextType {
@@ -72,8 +74,8 @@ interface MotorContextType {
 const MotorContext = createContext<MotorContextType | null>(null);
 
 export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
+  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(!!auth.currentUser);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Local state initialized empty (no dummy data)
@@ -82,7 +84,6 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const saved = localStorage.getItem(STORAGE_KEYS.MOTORCYCLES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Filter out any stale dummy data if present
         return parsed.filter((m: Motorcycle) => m.id !== 'motor-1' && m.id !== 'motor-2');
       }
     } catch (e) {
@@ -148,8 +149,13 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(records));
   }, [records]);
 
-  // Authenticate with Firebase on mount
+  // Authenticate with Firebase immediately
   useEffect(() => {
+    if (auth.currentUser) {
+      setUser(auth.currentUser);
+      setIsFirebaseConnected(true);
+    }
+
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
@@ -180,11 +186,10 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const motorCol = collection(db, 'users', userId, 'motorcycles');
     const unsubMotor = onSnapshot(
       query(motorCol),
-      async (snapshot) => {
+      (snapshot) => {
         const list: Motorcycle[] = [];
         snapshot.forEach((d) => {
           if (d.id === 'motor-1' || d.id === 'motor-2') {
-            // Delete legacy dummy record from Firestore
             deleteDoc(doc(db, 'users', userId, 'motorcycles', d.id)).catch(() => {});
           } else {
             list.push(d.data() as Motorcycle);
@@ -214,10 +219,15 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const reminderCol = collection(db, 'users', userId, 'reminders');
     const unsubReminders = onSnapshot(
       query(reminderCol),
-      async (snapshot) => {
+      (snapshot) => {
         const list: ServiceReminder[] = [];
         snapshot.forEach((d) => {
-          if (d.id.startsWith('rem-1-') || d.id.startsWith('rem-2-') || d.data().motorId === 'motor-1' || d.data().motorId === 'motor-2') {
+          if (
+            d.id.startsWith('rem-1-') ||
+            d.id.startsWith('rem-2-') ||
+            d.data().motorId === 'motor-1' ||
+            d.data().motorId === 'motor-2'
+          ) {
             deleteDoc(doc(db, 'users', userId, 'reminders', d.id)).catch(() => {});
           } else {
             list.push(d.data() as ServiceReminder);
@@ -234,10 +244,15 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const recordsCol = collection(db, 'users', userId, 'records');
     const unsubRecords = onSnapshot(
       query(recordsCol),
-      async (snapshot) => {
+      (snapshot) => {
         const list: ServiceRecord[] = [];
         snapshot.forEach((d) => {
-          if (d.id.startsWith('rec-1-') || d.id.startsWith('rec-2-') || d.data().motorId === 'motor-1' || d.data().motorId === 'motor-2') {
+          if (
+            d.id.startsWith('rec-1-') ||
+            d.id.startsWith('rec-2-') ||
+            d.data().motorId === 'motor-1' ||
+            d.data().motorId === 'motor-2'
+          ) {
             deleteDoc(doc(db, 'users', userId, 'records', d.id)).catch(() => {});
           } else {
             list.push(d.data() as ServiceRecord);
@@ -258,7 +273,8 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [user]);
 
   // Derived state for currently active motor
-  const activeMotor = motorcycles.find((m) => m.id === activeMotorId) || (motorcycles.length > 0 ? motorcycles[0] : undefined);
+  const activeMotor =
+    motorcycles.find((m) => m.id === activeMotorId) || (motorcycles.length > 0 ? motorcycles[0] : undefined);
   const activeReminders = activeMotor ? reminders.filter((r) => r.motorId === activeMotor.id) : [];
   const activeRecords = activeMotor
     ? records
@@ -269,27 +285,35 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Initialize standard manufacturer service reminders for a motorcycle
   const initDefaultRemindersForMotor = (motorId: string, motorType: string, currentKm: number) => {
     const today = new Date().toISOString().split('T')[0];
+    const targetUserId = user?.uid || auth.currentUser?.uid;
+
     const newReminders: ServiceReminder[] = DEFAULT_SERVICE_TEMPLATES.filter((tpl) =>
       tpl.appliesTo.includes(motorType as any)
-    ).map((tpl, idx) => ({
-      id: `rem-${motorId}-${idx + 1}-${Date.now()}`,
-      userId: user?.uid,
-      motorId,
-      title: tpl.title,
-      category: tpl.category,
-      intervalKm: tpl.defaultIntervalKm,
-      intervalMonths: tpl.defaultIntervalMonths,
-      lastServicedKm: currentKm,
-      lastServicedDate: today,
-      notes: tpl.description,
-      isCustom: false,
-    }));
+    ).map((tpl, idx) => {
+      const rem: ServiceReminder = {
+        id: `rem-${motorId}-${idx + 1}-${Date.now()}`,
+        motorId,
+        title: tpl.title,
+        category: tpl.category,
+        intervalKm: tpl.defaultIntervalKm,
+        intervalMonths: tpl.defaultIntervalMonths,
+        lastServicedKm: currentKm,
+        lastServicedDate: today,
+        notes: tpl.description || '',
+        isCustom: false,
+      };
+      if (targetUserId) {
+        rem.userId = targetUserId;
+      }
+      return rem;
+    });
 
     setReminders((prev) => [...prev, ...newReminders]);
 
-    if (user) {
+    if (targetUserId) {
       newReminders.forEach((r) => {
-        setDoc(doc(db, 'users', user.uid, 'reminders', r.id), r).catch((e) =>
+        const payload = cleanForFirestore({ ...r, userId: targetUserId });
+        setDoc(doc(db, 'users', targetUserId, 'reminders', r.id), payload).catch((e) =>
           console.error('Error adding reminder to Firestore:', e)
         );
       });
@@ -298,19 +322,24 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addMotorcycle = (motorData: Omit<Motorcycle, 'id' | 'createdAt'>): string => {
     const newId = `motor-${Date.now()}`;
+    const targetUserId = user?.uid || auth.currentUser?.uid;
+
     const newMotor: Motorcycle = {
       ...motorData,
       id: newId,
-      userId: user?.uid,
       createdAt: new Date().toISOString(),
     };
+    if (targetUserId) {
+      newMotor.userId = targetUserId;
+    }
 
     setMotorcycles((prev) => [...prev, newMotor]);
     setActiveMotorId(newId);
 
     // Save to Firestore
-    if (user) {
-      setDoc(doc(db, 'users', user.uid, 'motorcycles', newId), newMotor).catch((e) =>
+    if (targetUserId) {
+      const payload = cleanForFirestore({ ...newMotor, userId: targetUserId });
+      setDoc(doc(db, 'users', targetUserId, 'motorcycles', newId), payload).catch((e) =>
         console.error('Error saving motor to Firestore:', e)
       );
     }
@@ -322,18 +351,21 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateMotorcycle = (id: string, updates: Partial<Motorcycle>) => {
+    const targetUserId = user?.uid || auth.currentUser?.uid;
     setMotorcycles((prev) =>
       prev.map((m) => (m.id === id ? { ...m, ...updates } : m))
     );
 
-    if (user) {
-      updateDoc(doc(db, 'users', user.uid, 'motorcycles', id), updates).catch((e) =>
+    if (targetUserId) {
+      const payload = cleanForFirestore(updates);
+      updateDoc(doc(db, 'users', targetUserId, 'motorcycles', id), payload).catch((e) =>
         console.error('Error updating motor in Firestore:', e)
       );
     }
   };
 
   const deleteMotorcycle = (id: string) => {
+    const targetUserId = user?.uid || auth.currentUser?.uid;
     const remaining = motorcycles.filter((m) => m.id !== id);
     setMotorcycles(remaining);
     setReminders((prev) => prev.filter((r) => r.motorId !== id));
@@ -343,8 +375,8 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setActiveMotorId(remaining[0]?.id || '');
     }
 
-    if (user) {
-      deleteDoc(doc(db, 'users', user.uid, 'motorcycles', id)).catch((e) =>
+    if (targetUserId) {
+      deleteDoc(doc(db, 'users', targetUserId, 'motorcycles', id)).catch((e) =>
         console.error('Error deleting motor from Firestore:', e)
       );
     }
@@ -352,12 +384,14 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const updateOdometer = (motorId: string, newKm: number) => {
     if (newKm < 0) return;
+    const targetUserId = user?.uid || auth.currentUser?.uid;
+
     setMotorcycles((prev) =>
       prev.map((m) => (m.id === motorId ? { ...m, currentOdometer: newKm } : m))
     );
 
-    if (user) {
-      updateDoc(doc(db, 'users', user.uid, 'motorcycles', motorId), {
+    if (targetUserId) {
+      updateDoc(doc(db, 'users', targetUserId, 'motorcycles', motorId), {
         currentOdometer: newKm,
       }).catch((e) => console.error('Error updating odometer in Firestore:', e));
     }
@@ -368,17 +402,22 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     autoUpdateReminderIds?: string[]
   ) => {
     const newRecordId = `rec-${Date.now()}`;
+    const targetUserId = user?.uid || auth.currentUser?.uid;
+
     const newRecord: ServiceRecord = {
       ...recordData,
       id: newRecordId,
-      userId: user?.uid,
       createdAt: new Date().toISOString(),
     };
+    if (targetUserId) {
+      newRecord.userId = targetUserId;
+    }
 
     setRecords((prev) => [newRecord, ...prev]);
 
-    if (user) {
-      setDoc(doc(db, 'users', user.uid, 'records', newRecordId), newRecord).catch((e) =>
+    if (targetUserId) {
+      const payload = cleanForFirestore({ ...newRecord, userId: targetUserId });
+      setDoc(doc(db, 'users', targetUserId, 'records', newRecordId), payload).catch((e) =>
         console.error('Error saving record to Firestore:', e)
       );
     }
@@ -389,7 +428,7 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       updateOdometer(recordData.motorId, recordData.odometer);
     }
 
-    // Automatically update the corresponding reminders so the next scheduled service pushes forward
+    // Automatically update corresponding reminders
     if (autoUpdateReminderIds && autoUpdateReminderIds.length > 0) {
       setReminders((prev) =>
         prev.map((rem) => {
@@ -399,8 +438,8 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               lastServicedKm: recordData.odometer,
               lastServicedDate: recordData.date,
             };
-            if (user) {
-              updateDoc(doc(db, 'users', user.uid, 'reminders', rem.id), {
+            if (targetUserId) {
+              updateDoc(doc(db, 'users', targetUserId, 'reminders', rem.id), {
                 lastServicedKm: recordData.odometer,
                 lastServicedDate: recordData.date,
               }).catch((e) => console.error('Error updating reminder in Firestore:', e));
@@ -414,22 +453,27 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateServiceRecord = (id: string, updates: Partial<ServiceRecord>) => {
+    const targetUserId = user?.uid || auth.currentUser?.uid;
+
     setRecords((prev) =>
       prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
     );
 
-    if (user) {
-      updateDoc(doc(db, 'users', user.uid, 'records', id), updates).catch((e) =>
+    if (targetUserId) {
+      const payload = cleanForFirestore(updates);
+      updateDoc(doc(db, 'users', targetUserId, 'records', id), payload).catch((e) =>
         console.error('Error updating record in Firestore:', e)
       );
     }
   };
 
   const deleteServiceRecord = (id: string) => {
+    const targetUserId = user?.uid || auth.currentUser?.uid;
+
     setRecords((prev) => prev.filter((r) => r.id !== id));
 
-    if (user) {
-      deleteDoc(doc(db, 'users', user.uid, 'records', id)).catch((e) =>
+    if (targetUserId) {
+      deleteDoc(doc(db, 'users', targetUserId, 'records', id)).catch((e) =>
         console.error('Error deleting record from Firestore:', e)
       );
     }
@@ -437,43 +481,56 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addReminder = (reminderData: Omit<ServiceReminder, 'id'>) => {
     const newReminderId = `rem-custom-${Date.now()}`;
+    const targetUserId = user?.uid || auth.currentUser?.uid;
+
     const newReminder: ServiceReminder = {
       ...reminderData,
       id: newReminderId,
-      userId: user?.uid,
     };
+    if (targetUserId) {
+      newReminder.userId = targetUserId;
+    }
+
     setReminders((prev) => [...prev, newReminder]);
 
-    if (user) {
-      setDoc(doc(db, 'users', user.uid, 'reminders', newReminderId), newReminder).catch(
+    if (targetUserId) {
+      const payload = cleanForFirestore({ ...newReminder, userId: targetUserId });
+      setDoc(doc(db, 'users', targetUserId, 'reminders', newReminderId), payload).catch(
         (e) => console.error('Error adding reminder to Firestore:', e)
       );
     }
   };
 
   const updateReminder = (id: string, updates: Partial<ServiceReminder>) => {
+    const targetUserId = user?.uid || auth.currentUser?.uid;
+
     setReminders((prev) =>
       prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
     );
 
-    if (user) {
-      updateDoc(doc(db, 'users', user.uid, 'reminders', id), updates).catch((e) =>
+    if (targetUserId) {
+      const payload = cleanForFirestore(updates);
+      updateDoc(doc(db, 'users', targetUserId, 'reminders', id), payload).catch((e) =>
         console.error('Error updating reminder in Firestore:', e)
       );
     }
   };
 
   const deleteReminder = (id: string) => {
+    const targetUserId = user?.uid || auth.currentUser?.uid;
+
     setReminders((prev) => prev.filter((r) => r.id !== id));
 
-    if (user) {
-      deleteDoc(doc(db, 'users', user.uid, 'reminders', id)).catch((e) =>
+    if (targetUserId) {
+      deleteDoc(doc(db, 'users', targetUserId, 'reminders', id)).catch((e) =>
         console.error('Error deleting reminder from Firestore:', e)
       );
     }
   };
 
   const markReminderDone = (reminderId: string, servicedKm: number, dateStr: string) => {
+    const targetUserId = user?.uid || auth.currentUser?.uid;
+
     setReminders((prev) =>
       prev.map((r) =>
         r.id === reminderId
@@ -486,8 +543,8 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       )
     );
 
-    if (user) {
-      updateDoc(doc(db, 'users', user.uid, 'reminders', reminderId), {
+    if (targetUserId) {
+      updateDoc(doc(db, 'users', targetUserId, 'reminders', reminderId), {
         lastServicedKm: servicedKm,
         lastServicedDate: dateStr,
       }).catch((e) => console.error('Error marking reminder done in Firestore:', e));
@@ -503,17 +560,19 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const resetAllData = async () => {
-    if (user) {
+    const targetUserId = user?.uid || auth.currentUser?.uid;
+
+    if (targetUserId) {
       try {
         const batch = writeBatch(db);
         motorcycles.forEach((m) => {
-          batch.delete(doc(db, 'users', user.uid, 'motorcycles', m.id));
+          batch.delete(doc(db, 'users', targetUserId, 'motorcycles', m.id));
         });
         reminders.forEach((r) => {
-          batch.delete(doc(db, 'users', user.uid, 'reminders', r.id));
+          batch.delete(doc(db, 'users', targetUserId, 'reminders', r.id));
         });
         records.forEach((rec) => {
-          batch.delete(doc(db, 'users', user.uid, 'records', rec.id));
+          batch.delete(doc(db, 'users', targetUserId, 'records', rec.id));
         });
         await batch.commit();
       } catch (e) {
@@ -554,20 +613,23 @@ export const MotorProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           setActiveMotorId(parsed.motorcycles[0].id);
         }
 
-        // Upload to Firestore if logged in
-        if (user) {
+        const targetUserId = user?.uid || auth.currentUser?.uid;
+        if (targetUserId) {
           const batch = writeBatch(db);
           parsed.motorcycles.forEach((m: Motorcycle) => {
-            batch.set(doc(db, 'users', user.uid, 'motorcycles', m.id), { ...m, userId: user.uid });
+            const payload = cleanForFirestore({ ...m, userId: targetUserId });
+            batch.set(doc(db, 'users', targetUserId, 'motorcycles', m.id), payload);
           });
           if (Array.isArray(parsed.reminders)) {
             parsed.reminders.forEach((r: ServiceReminder) => {
-              batch.set(doc(db, 'users', user.uid, 'reminders', r.id), { ...r, userId: user.uid });
+              const payload = cleanForFirestore({ ...r, userId: targetUserId });
+              batch.set(doc(db, 'users', targetUserId, 'reminders', r.id), payload);
             });
           }
           if (Array.isArray(parsed.records)) {
             parsed.records.forEach((rec: ServiceRecord) => {
-              batch.set(doc(db, 'users', user.uid, 'records', rec.id), { ...rec, userId: user.uid });
+              const payload = cleanForFirestore({ ...rec, userId: targetUserId });
+              batch.set(doc(db, 'users', targetUserId, 'records', rec.id), payload);
             });
           }
           batch.commit().catch((e) => console.error('Error importing to Firestore:', e));

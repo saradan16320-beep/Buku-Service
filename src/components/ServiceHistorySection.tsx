@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useMotor } from '../context/MotorContext';
 import { ServiceRecord, ServiceType } from '../types';
 import { formatDateIndo, formatKm, formatRupiah } from '../utils/formatters';
+import { ConfirmModal } from './ConfirmModal';
 import {
   History,
   Search,
@@ -15,21 +16,29 @@ import {
   ShieldCheck,
   Tag,
   ImageIcon,
+  Pencil,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 
 interface ServiceHistorySectionProps {
   onOpenAddService: () => void;
+  onEditService?: (record: ServiceRecord) => void;
   onViewReceipt?: (imageUrl: string) => void;
 }
 
 export const ServiceHistorySection: React.FC<ServiceHistorySectionProps> = ({
   onOpenAddService,
+  onEditService,
   onViewReceipt,
 }) => {
   const { activeMotor, activeRecords, deleteServiceRecord } = useMotor();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [activeReceiptModal, setActiveReceiptModal] = useState<string | null>(null);
+
+  // In-app deletion state instead of window.confirm
+  const [recordToDelete, setRecordToDelete] = useState<ServiceRecord | null>(null);
 
   if (!activeMotor) return null;
 
@@ -112,7 +121,7 @@ export const ServiceHistorySection: React.FC<ServiceHistorySectionProps> = ({
 
         <button
           onClick={onOpenAddService}
-          className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition"
+          className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition active:scale-95"
         >
           <PlusCircle className="w-4 h-4" />
           <span>Catat Servis Baru</span>
@@ -139,11 +148,11 @@ export const ServiceHistorySection: React.FC<ServiceHistorySectionProps> = ({
           <select
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
-            className="bg-slate-900 border border-slate-800 text-slate-300 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-amber-500 transition"
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
           >
-            <option value="all">Semua Jenis Servis</option>
+            <option value="all">Semua Kategori Servis</option>
             <option value="rutin">Servis Berkala</option>
-            <option value="perbaikan">Perbaikan Kerusakan</option>
+            <option value="perbaikan">Perbaikan Kendala</option>
             <option value="ganti_ban">Ganti Ban</option>
             <option value="kelistrikan">Aki & Kelistrikan</option>
             <option value="modifikasi">Modifikasi</option>
@@ -152,16 +161,25 @@ export const ServiceHistorySection: React.FC<ServiceHistorySectionProps> = ({
         </div>
       </div>
 
-      {/* History List */}
+      {/* Records Timeline List */}
       {filteredRecords.length === 0 ? (
         <div className="text-center py-12 px-4 rounded-3xl border border-dashed border-slate-800 bg-slate-900/30">
-          <Wrench className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-sm font-bold text-slate-300">Belum ada riwayat servis yang sesuai</h3>
+          <FileText className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+          <h3 className="text-sm font-bold text-slate-300">Belum Ada Riwayat Servis</h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
             {searchQuery
-              ? 'Tidak ditemukan servis dengan kata kunci tersebut. Coba ubah pencarian.'
-              : 'Klik "Catat Servis Baru" untuk mencatat servis pertama Anda pada motor ini.'}
+              ? 'Tidak ada catatan servis yang cocok dengan pencarian kata kunci ini.'
+              : 'Klik tombol "+ Catat Servis Baru" di atas untuk menyimpan nota dan riwayat servis pertama motor ini.'}
           </p>
+          <div className="mt-4 flex justify-center">
+            <button
+              onClick={onOpenAddService}
+              className="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Catat Servis Sekarang</span>
+            </button>
+          </div>
         </div>
       ) : (
         <div className="space-y-3.5">
@@ -249,7 +267,7 @@ export const ServiceHistorySection: React.FC<ServiceHistorySectionProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-1.5 mt-2">
                       {record.receiptImage && (
                         <button
                           onClick={() => setActiveReceiptModal(record.receiptImage || null)}
@@ -261,12 +279,21 @@ export const ServiceHistorySection: React.FC<ServiceHistorySectionProps> = ({
                         </button>
                       )}
 
+                      {/* EDIT BUTTON */}
+                      {onEditService && (
+                        <button
+                          onClick={() => onEditService(record)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-amber-300 transition"
+                          title="Edit Catatan Servis Ini"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+
+                      {/* DELETE BUTTON with in-app confirmation */}
                       <button
-                        onClick={() => {
-                          if (confirm('Hapus riwayat servis ini? Biaya dan log akan dihapus.')) {
-                            deleteServiceRecord(record.id);
-                          }
-                        }}
+                        onClick={() => setRecordToDelete(record)}
                         className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition"
                         title="Hapus Catatan Ini"
                       >
@@ -280,6 +307,23 @@ export const ServiceHistorySection: React.FC<ServiceHistorySectionProps> = ({
           })}
         </div>
       )}
+
+      {/* In-App Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(recordToDelete)}
+        onClose={() => setRecordToDelete(null)}
+        onConfirm={() => {
+          if (recordToDelete) {
+            deleteServiceRecord(recordToDelete.id);
+            setRecordToDelete(null);
+          }
+        }}
+        title="Hapus Catatan Servis?"
+        message={`Catatan servis tanggal ${recordToDelete ? formatDateIndo(recordToDelete.date) : ''} (${recordToDelete?.workshopName || 'Bengkel'}) senilai ${recordToDelete ? (recordToDelete.totalCost === 0 ? 'GRATIS' : formatRupiah(recordToDelete.totalCost)) : ''} akan dihapus secara permanen.`}
+        confirmText="Hapus Catatan"
+        cancelText="Batal"
+        isDanger={true}
+      />
 
       {/* Receipt Image Zoom Modal */}
       {activeReceiptModal && (
@@ -298,15 +342,15 @@ export const ServiceHistorySection: React.FC<ServiceHistorySectionProps> = ({
               </h4>
               <button
                 onClick={() => setActiveReceiptModal(null)}
-                className="text-xs bg-slate-800 text-slate-300 hover:text-white px-2.5 py-1 rounded-lg"
+                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800"
               >
-                Tutup
+                <X className="w-5 h-5" />
               </button>
             </div>
             <img
               src={activeReceiptModal}
-              alt="Nota Servis"
-              className="w-full rounded-2xl object-contain max-h-[70vh] border border-slate-800"
+              alt="Foto Nota Kasir"
+              className="max-h-[75vh] w-auto mx-auto rounded-2xl object-contain border border-slate-800"
             />
           </div>
         </div>

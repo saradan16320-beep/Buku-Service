@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useMotor } from '../context/MotorContext';
 import { ServiceReminder } from '../types';
 import { computeReminder, getStatusBadge, formatDateIndo } from '../utils/formatters';
+import { ConfirmModal } from './ConfirmModal';
 import {
   Clock,
   Gauge,
@@ -17,16 +18,19 @@ import {
 
 interface ServiceRemindersSectionProps {
   onOpenAddReminder: () => void;
+  onOpenAddService?: () => void;
   onQuickRecordService: (reminder: ServiceReminder) => void;
   onEditReminder?: (reminder: ServiceReminder) => void;
 }
 
 export const ServiceRemindersSection: React.FC<ServiceRemindersSectionProps> = ({
   onOpenAddReminder,
+  onOpenAddService,
   onQuickRecordService,
 }) => {
   const { activeMotor, activeReminders, deleteReminder } = useMotor();
   const [filter, setFilter] = useState<'all' | 'due' | 'good'>('all');
+  const [reminderToDelete, setReminderToDelete] = useState<ServiceReminder | null>(null);
 
   if (!activeMotor) return null;
 
@@ -81,12 +85,12 @@ export const ServiceRemindersSection: React.FC<ServiceRemindersSectionProps> = (
           </p>
         </div>
 
-        {/* Filter Pills & Add Button */}
-        <div className="flex items-center gap-2">
+        {/* Filter Pills & Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-medium">
             <button
               onClick={() => setFilter('all')}
-              className={`px-3 py-1 rounded-lg transition ${
+              className={`px-2.5 sm:px-3 py-1 rounded-lg transition ${
                 filter === 'all'
                   ? 'bg-slate-800 text-white font-bold'
                   : 'text-slate-400 hover:text-slate-200'
@@ -96,7 +100,7 @@ export const ServiceRemindersSection: React.FC<ServiceRemindersSectionProps> = (
             </button>
             <button
               onClick={() => setFilter('due')}
-              className={`px-3 py-1 rounded-lg transition flex items-center gap-1 ${
+              className={`px-2.5 sm:px-3 py-1 rounded-lg transition flex items-center gap-1 ${
                 filter === 'due'
                   ? 'bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30'
                   : 'text-slate-400 hover:text-slate-200'
@@ -109,7 +113,7 @@ export const ServiceRemindersSection: React.FC<ServiceRemindersSectionProps> = (
             </button>
             <button
               onClick={() => setFilter('good')}
-              className={`px-3 py-1 rounded-lg transition ${
+              className={`px-2.5 sm:px-3 py-1 rounded-lg transition ${
                 filter === 'good'
                   ? 'bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30'
                   : 'text-slate-400 hover:text-slate-200'
@@ -119,12 +123,22 @@ export const ServiceRemindersSection: React.FC<ServiceRemindersSectionProps> = (
             </button>
           </div>
 
+          {onOpenAddService && (
+            <button
+              onClick={onOpenAddService}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-sm transition active:scale-95"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[3]" />
+              <span>Catat Servis</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenAddReminder}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-sm transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold text-xs transition"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Tambah</span>
+            <Plus className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Tambah Jadwal</span>
           </button>
         </div>
       </div>
@@ -257,11 +271,7 @@ export const ServiceRemindersSection: React.FC<ServiceRemindersSectionProps> = (
                   </button>
 
                   <button
-                    onClick={() => {
-                      if (confirm(`Hapus pengingat "${item.title}"?`)) {
-                        deleteReminder(item.id);
-                      }
-                    }}
+                    onClick={() => setReminderToDelete(item)}
                     className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition"
                     title="Hapus Pengingat"
                   >
@@ -273,6 +283,23 @@ export const ServiceRemindersSection: React.FC<ServiceRemindersSectionProps> = (
           })}
         </div>
       )}
+
+      {/* In-app Confirmation for Deleting Reminder */}
+      <ConfirmModal
+        isOpen={Boolean(reminderToDelete)}
+        onClose={() => setReminderToDelete(null)}
+        onConfirm={() => {
+          if (reminderToDelete) {
+            deleteReminder(reminderToDelete.id);
+            setReminderToDelete(null);
+          }
+        }}
+        title="Hapus Pengingat Servis?"
+        message={`Jadwal pengingat "${reminderToDelete?.title}" akan dihapus dari motor ini.`}
+        confirmText="Hapus Pengingat"
+        cancelText="Batal"
+        isDanger={true}
+      />
     </div>
   );
 };

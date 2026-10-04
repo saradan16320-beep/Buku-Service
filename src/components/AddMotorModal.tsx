@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useMotor } from '../context/MotorContext';
 import { Motorcycle, MotorcycleType } from '../types';
+import { ConfirmModal } from './ConfirmModal';
 import { X, Bike, Check, Trash2 } from 'lucide-react';
 
 interface AddMotorModalProps {
@@ -25,8 +26,11 @@ export const AddMotorModal: React.FC<AddMotorModalProps> = ({
   const [avgKmPerDay, setAvgKmPerDay] = useState<number>(25);
   const [color, setColor] = useState('');
   const [notes, setNotes] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
+    setErrorMessage('');
     if (editingMotor) {
       setName(editingMotor.name);
       setPlateNumber(editingMotor.plateNumber);
@@ -54,8 +58,10 @@ export const AddMotorModal: React.FC<AddMotorModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
+
     if (!name.trim() || !plateNumber.trim()) {
-      alert('Nama model dan plat nomor wajib diisi!');
+      setErrorMessage('Nama model dan plat nomor wajib diisi!');
       return;
     }
 
@@ -90,10 +96,7 @@ export const AddMotorModal: React.FC<AddMotorModalProps> = ({
 
   const handleDelete = () => {
     if (!editingMotor) return;
-    if (confirm(`Yakin ingin menghapus profil motor "${editingMotor.name}"? Semua data riwayat servisnya akan terhapus.`)) {
-      deleteMotorcycle(editingMotor.id);
-      onClose();
-    }
+    setShowDeleteConfirm(true);
   };
 
   const popularModels = [
@@ -132,6 +135,12 @@ export const AddMotorModal: React.FC<AddMotorModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {errorMessage && (
+          <div className="mt-3.5 p-3 rounded-2xl bg-red-500/15 border border-red-500/30 text-xs font-semibold text-red-400">
+            {errorMessage}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           {/* Brand & Model Name */}
@@ -326,6 +335,24 @@ export const AddMotorModal: React.FC<AddMotorModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* In-app Confirmation for Deleting Motorcycle */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => {
+          if (editingMotor) {
+            deleteMotorcycle(editingMotor.id);
+            setShowDeleteConfirm(false);
+            onClose();
+          }
+        }}
+        title="Hapus Profil Motor?"
+        message={`Profil motor "${editingMotor?.name}" (${editingMotor?.plateNumber}) beserta semua riwayat servis dan jadwal pengingatnya akan dihapus permanen.`}
+        confirmText="Hapus Motor"
+        cancelText="Batal"
+        isDanger={true}
+      />
     </div>
   );
 };
